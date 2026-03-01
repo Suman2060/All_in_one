@@ -8,7 +8,10 @@ export interface Product {
   image: string;
 }
 
-
+// ── Mock data — same shape as the real API ──
+// image field uses a free placeholder service (no signup needed)
+// Format: https://placehold.co/300x300?text=ProductName
+// When real API is ready, these image URLs get replaced automatically
 
 export const mockProducts: Product[] = [
   {
@@ -84,7 +87,7 @@ export const mockProducts: Product[] = [
 export interface ProductMeta {
   rating: number;
   reviews: number;
-  badge?: string;       // "Sale" | "New" | "Bestseller" | "Hot"
+  badge?: string;       
   badgeColor?: string;  // Tailwind class e.g. "bg-rose-500"
   oldPrice?: number;    // only for sale items
 }
