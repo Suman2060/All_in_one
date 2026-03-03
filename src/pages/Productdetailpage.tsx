@@ -1,11 +1,16 @@
+
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
-  Star, ShoppingCart, Heart, ArrowLeft,
-    Share2, Minus, Plus
+  Star, ShoppingCart, ArrowLeft,
+  Minus, Plus
 } from "lucide-react";
-import { mockProducts, productMeta } from "@/data/products";
+import { productMeta } from "@/data/products";
 import { ProductDetailSkeleton } from "@/components/ProductSkeletons";
+import { fetchProductById, fetchProductsByCategory } from "@/services/Api";
+import type { Product } from "@/types/Product.types";
+import { useCartStore } from "@/store/cartStore";
+import { Navbar } from "@/components/Navbar";
 
 const StarRating = ({ rating, size = 16 }: { rating: number; size?: number }) => (
   <div className="flex items-center gap-0.5">
@@ -26,22 +31,37 @@ const StarRating = ({ rating, size = 16 }: { rating: number; size?: number }) =>
 const ProductDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const items = useCartStore((state) => state.items);
+  const addToCart = useCartStore((state) => state.addToCart);
 
+  const [product, setProduct] = useState<Product | null>(null);
+  const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
-  const [isWishlisted, setWishlisted] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setIsLoading(false), 1500);
-    return () => clearTimeout(t);
-  }, [id]);
+    const loadProductData = async () => {
+      setIsLoading(true);
+      if (!id) return;
+      try {
+        const productData = await fetchProductById(id);
+        setProduct(productData);
 
-  const product = mockProducts.find((p) => p.id === Number(id));
-  const meta = product ? productMeta[product.id] : undefined;
+        // Fetch related products
+        const related = await fetchProductsByCategory(productData.category);
+        setRelatedProducts(related.filter(p => p.id !== productData.id).slice(0, 4));
+      } catch (error) {
+        console.error("Failed to fetch product details:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadProductData();
+  }, [id]);
 
   if (isLoading) return <ProductDetailSkeleton />;
 
-  if (!product || !meta) {
+  if (!product) {
     return (
       <div className="min-h-screen bg-slate-50 pt-16 flex items-center justify-center">
         <div className="text-center">
@@ -56,16 +76,16 @@ const ProductDetailPage = () => {
     );
   }
 
+  const meta = productMeta[product.id] ?? { rating: product.rating.rate, reviews: product.rating.count };
   const hasDiscount = meta.oldPrice !== undefined;
   const discountPct = hasDiscount ? Math.round(((meta.oldPrice! - product.price) / meta.oldPrice!) * 100) : 0;
   const totalPrice = (product.price * quantity).toFixed(2);
 
-  const relatedProducts = mockProducts
-    .filter((p) => p.category === product.category && p.id !== product.id)
-    .slice(0, 4);
+  const inCart = items.some((item) => item.id === product.id);
 
   return (
     <div className="min-h-screen bg-slate-50 pt-16">
+      <Navbar />
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-2 text-sm text-slate-500">
           <Link to="/" className="hover:text-indigo-600 transition-colors">Home</Link>
@@ -105,21 +125,6 @@ const ProductDetailPage = () => {
               />
             </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={() => setWishlisted(!isWishlisted)}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-medium transition-all ${
-                  isWishlisted ? "bg-rose-50 border-rose-200 text-rose-600" : "border-slate-200 text-slate-600 hover:border-rose-200 hover:text-rose-500"
-                }`}
-              >
-                <Heart size={16} className={isWishlisted ? "fill-rose-500" : ""} />
-                {isWishlisted ? "Wishlisted" : "Add to Wishlist"}
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600 text-sm font-medium transition-colors">
-                <Share2 size={16} />
-                Share
-              </button>
-            </div>
           </div>
 
           <div className="flex flex-col gap-5">
@@ -127,9 +132,9 @@ const ProductDetailPage = () => {
             <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 leading-tight">{product.title}</h1>
 
             <div className="flex items-center gap-3">
-              <StarRating rating={meta.rating} />
-              <span className="text-sm font-semibold text-slate-700">{meta.rating}</span>
-              <span className="text-sm text-slate-400">({meta.reviews.toLocaleString()} reviews)</span>
+              <StarRating rating={meta.rating || product.rating.rate} />
+              <span className="text-sm font-semibold text-slate-700">{meta.rating || product.rating.rate}</span>
+              <span className="text-sm text-slate-400">({(meta.reviews || product.rating.count).toLocaleString()} reviews)</span>
             </div>
 
             <div className="flex items-baseline gap-3 py-3 border-y border-slate-100">
@@ -169,10 +174,20 @@ const ProductDetailPage = () => {
             )}
 
             <div className="flex flex-col sm:flex-row gap-3">
-              <button className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3.5 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]">
-                <ShoppingCart size={18} /> Add to Cart
+              <button
+                onClick={() => addToCart(product, quantity)}
+                className={`flex-1 flex items-center justify-center gap-2 font-semibold py-3.5 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] ${inCart
+                  ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                  : "bg-indigo-600 hover:bg-indigo-500 text-white"
+                  }`}
+              >
+                <ShoppingCart size={18} />
+                {inCart ? "Added to Cart ✓" : "Add to Cart"}
               </button>
-              <button className="flex-1 flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3.5 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]">
+              <button
+                onClick={() => { addToCart(product, quantity); navigate("/cart"); }}
+                className="flex-1 flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3.5 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
                 Buy Now
               </button>
             </div>
@@ -180,30 +195,30 @@ const ProductDetailPage = () => {
           </div>
         </div>
 
-        </div>
-
-        {relatedProducts.length > 0 && (
-          <div className="mt-10">
-            <h2 className="text-xl font-extrabold text-slate-900 mb-5">Related Products</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              {relatedProducts.map((p) => (
-                <Link key={p.id} to={`/products/${p.id}`} className="group bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg transition-all overflow-hidden">
-                  <div className="bg-slate-50 h-36 flex items-center justify-center p-4">
-                    <img src={p.image} alt={p.title} className="h-full object-contain group-hover:scale-105 transition-transform" />
-                  </div>
-                  <div className="p-3">
-                    <p className="text-sm font-semibold text-slate-800 line-clamp-2 group-hover:text-indigo-600">{p.title}</p>
-                    <div className="flex items-center justify-between mt-2">
-                      <StarRating rating={productMeta[p.id]?.rating ?? 4.0} size={12} />
-                      <span className="text-sm font-bold">${p.price.toFixed(2)}</span>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
+
+      {relatedProducts.length > 0 && (
+        <div className="mt-10">
+          <h2 className="text-xl font-extrabold text-slate-900 mb-5">Related Products</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {relatedProducts.map((p) => (
+              <Link key={p.id} to={`/products/${p.id}`} className="group bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg transition-all overflow-hidden">
+                <div className="bg-slate-50 h-36 flex items-center justify-center p-4">
+                  <img src={p.image} alt={p.title} className="h-full object-contain group-hover:scale-105 transition-transform" />
+                </div>
+                <div className="p-3">
+                  <p className="text-sm font-semibold text-slate-800 line-clamp-2 group-hover:text-indigo-600">{p.title}</p>
+                  <div className="flex items-center justify-between mt-2">
+                    <StarRating rating={productMeta[p.id]?.rating || p.rating.rate} size={12} />
+                    <span className="text-sm font-bold">${p.price.toFixed(2)}</span>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 

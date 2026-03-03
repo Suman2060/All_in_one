@@ -1,8 +1,12 @@
 
-import { Heart, Star } from "lucide-react"
-import {Link} from "react-router-dom"
-import { mockProducts, productMeta } from "@/data/products";
-import type { Product, ProductMeta } from "@/data/products";
+import { useState, useEffect } from "react";
+import { Heart, ShoppingCart, Star } from "lucide-react"
+import { Link } from "react-router-dom"
+import { productMeta } from "@/data/products";
+import type { ProductMeta } from "@/data/products";
+import { fetchFeaturedProducts } from "@/services/Api";
+import type { Product } from "@/types/Product.types";
+import { useCartStore } from "@/store/cartStore";
 
 const StarRating = ({ rating }: { rating: number }) => (
   <div className="flex items-center gap-0.5">
@@ -25,19 +29,22 @@ interface ProductCardProps {
   meta: ProductMeta;
 }
 
-const ProductCard = ({product,meta}: ProductCardProps) => {
-  const hasDiscount =meta.oldPrice !== undefined;
+const ProductCard = ({ product, meta }: ProductCardProps) => {
+  const items = useCartStore((state) => state.items);
+  const addToCart = useCartStore((state) => state.addToCart);
+  const inCart = items.some((item) => item.id === product.id);
+  const hasDiscount = meta.oldPrice !== undefined;
   const discountPct = hasDiscount
-  ? Math.round(((meta.oldPrice!-product.price)/
-meta.oldPrice!)*100)
-:0;
- return (
+    ? Math.round(((meta.oldPrice! - product.price) /
+      meta.oldPrice!) * 100)
+    : 0;
+  return (
     <div className="group bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-200/60 transition-all duration-300 overflow-hidden flex flex-col">
 
-    
+
       <div className="relative bg-slate-50 h-52 overflow-hidden">
 
-      
+
         <img
           src={product.image}
           alt={product.title}
@@ -49,21 +56,21 @@ meta.oldPrice!)*100)
           }}
         />
 
-      
+
         {meta.badge && (
           <span className={`absolute top-3 left-3 ${meta.badgeColor} text-white text-[11px] font-bold px-2.5 py-1 rounded-full`}>
             {meta.badge}
           </span>
         )}
 
-   
+
         {hasDiscount && (
           <span className="absolute top-3 right-3 bg-rose-500 text-white text-[11px] font-bold px-2 py-1 rounded-full">
             -{discountPct}%
           </span>
         )}
 
-      
+
         <button className="absolute bottom-3 right-3 bg-white/80 backdrop-blur-sm p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-rose-50 hover:text-rose-500 text-slate-400">
           <Heart size={15} />
         </button>
@@ -76,7 +83,7 @@ meta.oldPrice!)*100)
           {product.category}
         </span>
 
-        
+
         <Link
           to={`/products/${product.id}`}
           className="text-sm font-semibold text-slate-800 hover:text-indigo-600 transition-colors leading-snug line-clamp-2"
@@ -85,13 +92,13 @@ meta.oldPrice!)*100)
         </Link>
 
         <div className="flex items-center gap-1.5">
-          <StarRating rating={meta.rating} />
+          <StarRating rating={meta.rating || product.rating.rate} />
           <span className="text-xs text-slate-400">
-            {meta.rating} ({meta.reviews.toLocaleString()})
+            {meta.rating || product.rating.rate} ({(meta.reviews || product.rating.count).toLocaleString()})
           </span>
         </div>
 
-       
+
         <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-50">
           <div className="flex items-baseline gap-2">
             <span className="text-lg font-extrabold text-slate-900">
@@ -104,10 +111,16 @@ meta.oldPrice!)*100)
             )}
           </div>
 
-          {/* <button className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors duration-200 active:scale-95">
+          <button
+            onClick={(e) => { e.preventDefault(); addToCart(product); }}
+            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-colors duration-200 active:scale-95 ${inCart
+              ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+              : "bg-indigo-600 hover:bg-indigo-500 text-white"
+              }`}
+          >
             <ShoppingCart size={14} />
-            Add
-          </button> */}
+            {inCart ? "Added" : "Add"}
+          </button>
         </div>
       </div>
     </div>
@@ -116,6 +129,23 @@ meta.oldPrice!)*100)
 
 
 const FeaturedProducts = () => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        const data = await fetchFeaturedProducts(8);
+        setProducts(data);
+      } catch (error) {
+        console.error("Failed to fetch featured products:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadProducts();
+  }, []);
+
   return (
     <section className="bg-slate-50 py-20 px-4">
       <div className="max-w-7xl mx-auto">
@@ -139,15 +169,24 @@ const FeaturedProducts = () => {
             View All Products →
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-          {mockProducts.slice(0, 8).map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              meta={productMeta[product.id] ?? { rating: 4.0, reviews: 0 }}
-            />
-          ))}
-        </div>
+
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl h-80 animate-pulse border border-slate-100" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+            {products.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                meta={productMeta[product.id] ?? { rating: product.rating.rate, reviews: product.rating.count }}
+              />
+            ))}
+          </div>
+        )}
 
       </div>
     </section>

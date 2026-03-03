@@ -1,10 +1,14 @@
+
 import { useState, useMemo, useEffect } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { ShoppingCart, Star, Heart, Search, SlidersHorizontal, X } from "lucide-react";
-import { mockProducts, productMeta } from "@/data/products";
-import type { Product, ProductMeta } from "@/data/products";
+import { productMeta } from "@/data/products";
+import type { ProductMeta } from "@/data/products";
 import { ProductsPageSkeleton } from "@/components/ProductSkeletons";
 import { Navbar } from "@/components/Navbar";
+import { fetchAllProducts, fetchCategories } from "@/services/Api";
+import type { Product } from "@/types/Product.types";
+import { useCartStore } from "@/store/cartStore";
 
 const StarRating = ({ rating }: { rating: number }) => (
   <div className="flex items-center gap-0.5">
@@ -19,6 +23,9 @@ const StarRating = ({ rating }: { rating: number }) => (
 );
 
 const ProductCard = ({ product, meta }: { product: Product; meta: ProductMeta }) => {
+  const items = useCartStore((state) => state.items);
+  const addToCart = useCartStore((state) => state.addToCart);
+  const inCart = items.some((item) => item.id === product.id);
   const hasDiscount = meta.oldPrice !== undefined;
   const discountPct = hasDiscount ? Math.round(((meta.oldPrice! - product.price) / meta.oldPrice!) * 100) : 0;
 
@@ -54,16 +61,23 @@ const ProductCard = ({ product, meta }: { product: Product; meta: ProductMeta })
           {product.title}
         </Link>
         <div className="flex items-center gap-1.5">
-          <StarRating rating={meta.rating} />
-          <span className="text-xs text-slate-400">{meta.rating} ({meta.reviews.toLocaleString()})</span>
+          <StarRating rating={meta.rating || product.rating.rate} />
+          <span className="text-xs text-slate-400">{meta.rating || product.rating.rate} ({(meta.reviews || product.rating.count).toLocaleString()})</span>
         </div>
         <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-50">
           <div className="flex items-baseline gap-2">
             <span className="text-lg font-extrabold text-slate-900">${product.price.toFixed(2)}</span>
             {hasDiscount && <span className="text-xs text-slate-400 line-through">${meta.oldPrice!.toFixed(2)}</span>}
           </div>
-          <button className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors active:scale-95">
-            <ShoppingCart size={14} /> Add
+          <button
+            onClick={() => addToCart(product)}
+            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-colors active:scale-95 ${inCart
+              ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+              : "bg-indigo-600 hover:bg-indigo-500 text-white"
+              }`}
+          >
+            <ShoppingCart size={14} />
+            {inCart ? "Added ✓" : "Add"}
           </button>
         </div>
       </div>
@@ -79,26 +93,39 @@ const sortOptions = [
   { value: "rating", label: "Top Rated" },
 ];
 
-const allCategories = ["all", ...Array.from(new Set(mockProducts.map((p) => p.category)))];
-
 const ProductsPage = () => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchParams, setSearchParams] = useSearchParams();
   const urlSearch = searchParams.get("search") ?? "";
-  
+
   const [localSearch, setLocalSearch] = useState(urlSearch);
   const [activeCategory, setActiveCategory] = useState("all");
   const [sortBy, setSortBy] = useState("default");
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
-    const t = setTimeout(() => setIsLoading(false), 1000);
-    return () => clearTimeout(t);
+    const loadData = async () => {
+      try {
+        const [productsData, categoriesData] = await Promise.all([
+          fetchAllProducts(),
+          fetchCategories()
+        ]);
+        setProducts(productsData);
+        setCategories(categoriesData);
+      } catch (error) {
+        console.error("Failed to load products/categories:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
   }, []);
 
   const filteredProducts = useMemo(() => {
     const searchTerm = (urlSearch || localSearch).toLowerCase().trim();
-    let results = [...mockProducts];
+    let results = [...products];
 
     if (searchTerm) {
       results = results.filter((p) =>
@@ -117,30 +144,38 @@ const ProductsPage = () => {
       case "price-desc": results.sort((a, b) => b.price - a.price); break;
       case "name-asc": results.sort((a, b) => a.title.localeCompare(b.title)); break;
       case "rating":
-        results.sort((a, b) => (productMeta[b.id]?.rating ?? 0) - (productMeta[a.id]?.rating ?? 0));
+        results.sort((a, b) => {
+          const ratingA = productMeta[a.id]?.rating ?? a.rating.rate;
+          const ratingB = productMeta[b.id]?.rating ?? b.rating.rate;
+          return ratingB - ratingA;
+        });
         break;
     }
 
     return results;
-  }, [urlSearch, localSearch, activeCategory, sortBy]);
+  }, [products, urlSearch, localSearch, activeCategory, sortBy]);
 
   const clearSearch = () => {
     setSearchParams({});
     setLocalSearch("");
   };
 
+  const allCategories = ["all", ...categories];
+
   if (isLoading) return <ProductsPageSkeleton />;
 
   return (
-    
+
     <div className="min-h-screen bg-slate-50 pt-16">
-        <Navbar/>
+      <Navbar />
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 py-8">
           <h1 className="text-3xl font-extrabold text-slate-900 text-center">All Products</h1>
-          <p className="text-slate-500 text-sm mt-1">
-            {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""} found
-          </p>
+          <div className="flex justify-between items-center mt-4">
+            <p className="text-slate-500 text-sm">
+              {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""} found
+            </p>
+          </div>
           {urlSearch && (
             <div className="mt-3 inline-flex items-center gap-2 bg-indigo-50 text-indigo-700 border border-indigo-200 text-sm px-3 py-1.5 rounded-full">
               <Search size={13} />
@@ -190,9 +225,8 @@ const ProductsPage = () => {
             <button
               key={cat}
               onClick={() => setActiveCategory(cat)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors capitalize ${
-                activeCategory === cat ? "bg-indigo-600 text-white" : "bg-white border border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
-              }`}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors capitalize ${activeCategory === cat ? "bg-indigo-600 text-white" : "bg-white border border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
+                }`}
             >
               {cat === "all" ? "All Categories" : cat}
             </button>
@@ -202,7 +236,7 @@ const ProductsPage = () => {
         {filteredProducts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredProducts.map((product) => (
-              <ProductCard key={product.id} product={product} meta={productMeta[product.id] ?? { rating: 4.0, reviews: 0 }} />
+              <ProductCard key={product.id} product={product} meta={productMeta[product.id] ?? { rating: product.rating.rate, reviews: product.rating.count }} />
             ))}
           </div>
         ) : (

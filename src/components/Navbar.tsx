@@ -11,15 +11,15 @@ import {
 } from "@/components/ui/navigation-menu";
 import useDebounce from "@/hooks/useDebounce";
 import { useEffect, useState } from "react";
+import { useCartStore } from "@/store/cartStore";
 
 export function Navbar() {
 
   const navigate = useNavigate();
-
   const [searchInput, setSearchInput] = useState("");
-
-  // debounce function
   const debouncedSearch =useDebounce(searchInput,500)
+
+  const cartCount = useCartStore((state) => state.getItemCount())
   
   useEffect(() => {
      
@@ -89,6 +89,11 @@ export function Navbar() {
           <Link to="/login" className="text-sm font-medium hover:text-indigo-600">Login</Link>
           <Link to="/cart" className="relative">
             <ShoppingCart size={22} />
+            {cartCount > 0 && (
+              <span className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                {cartCount > 99 ? "99+" : cartCount}
+              </span>
+            )}
             <span className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[10px] rounded-full px-1.5"></span>
           </Link>
         </div>
