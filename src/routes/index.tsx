@@ -1,14 +1,15 @@
-
-
 import { lazy, Suspense } from "react";
 import { createBrowserRouter } from "react-router-dom";
 import { ProductsPageSkeleton } from "@/components/ProductSkeletons";
 import { ProductDetailSkeleton } from "@/components/ProductSkeletons";
+import ProtectedRoute from "./ProtectedRoute";
 
 const Home = lazy(() => import("../pages/Home"));
 const ProductPage = lazy(() => import("../pages/Productpage"));
 const ProductDetailPage = lazy(() => import("../pages/Productdetailpage"));
 const CartPage = lazy(() => import("../pages/Cartpage"));
+const LoginPage = lazy(() => import("../pages/Loginpage"));
+const CheckoutPage = lazy(() => import("../pages/Checkoutpage"));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center">
@@ -39,9 +40,29 @@ export const router = createBrowserRouter([
   {
     path: "/cart",
     element: (
+      <ProtectedRoute>
+        <Suspense fallback={<PageLoader />}>
+          <CartPage />
+        </Suspense>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/login",
+    element: (
       <Suspense fallback={<PageLoader />}>
-        <CartPage />
+        <LoginPage />
       </Suspense>
+    ),
+  },
+  {
+    path: "/checkout",
+    element: (
+      <ProtectedRoute>
+        <Suspense fallback={<PageLoader />}>
+          <CheckoutPage />
+        </Suspense>
+      </ProtectedRoute>
     ),
   },
   {

@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
-  Star, ShoppingCart, ArrowLeft,
+  ShoppingCart, ArrowLeft,
   Minus, Plus
 } from "lucide-react";
 import { productMeta } from "@/data/products";
@@ -10,29 +10,18 @@ import { ProductDetailSkeleton } from "@/components/ProductSkeletons";
 import { fetchProductById, fetchProductsByCategory } from "@/services/Api";
 import type { Product } from "@/types/Product.types";
 import { useCartStore } from "@/store/cartStore";
+import { useAuthStore } from "@/store/authStore";
 import { Navbar } from "@/components/Navbar";
+import { StarRating } from "@/components/ProductCard";
 
-const StarRating = ({ rating, size = 16 }: { rating: number; size?: number }) => (
-  <div className="flex items-center gap-0.5">
-    {[1, 2, 3, 4, 5].map((star) => (
-      <Star
-        key={star}
-        size={size}
-        className={
-          star <= Math.round(rating)
-            ? "text-amber-400 fill-amber-400"
-            : "text-slate-200 fill-slate-200"
-        }
-      />
-    ))}
-  </div>
-);
+
 
 const ProductDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const items = useCartStore((state) => state.items);
   const addToCart = useCartStore((state) => state.addToCart);
+  const user = useAuthStore((state) => state.user);
 
   const [product, setProduct] = useState<Product | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
@@ -82,6 +71,23 @@ const ProductDetailPage = () => {
   const totalPrice = (product.price * quantity).toFixed(2);
 
   const inCart = items.some((item) => item.id === product.id);
+
+  const handleAddToCart = () => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+    addToCart(product, quantity);
+  };
+
+  const handleBuyNow = () => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+    addToCart(product, quantity);
+    navigate("/cart");
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 pt-16">
@@ -175,7 +181,7 @@ const ProductDetailPage = () => {
 
             <div className="flex flex-col sm:flex-row gap-3">
               <button
-                onClick={() => addToCart(product, quantity)}
+                onClick={handleAddToCart}
                 className={`flex-1 flex items-center justify-center gap-2 font-semibold py-3.5 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] ${inCart
                   ? "bg-emerald-500 hover:bg-emerald-600 text-white"
                   : "bg-indigo-600 hover:bg-indigo-500 text-white"
@@ -185,7 +191,7 @@ const ProductDetailPage = () => {
                 {inCart ? "Added to Cart ✓" : "Add to Cart"}
               </button>
               <button
-                onClick={() => { addToCart(product, quantity); navigate("/cart"); }}
+                onClick={handleBuyNow}
                 className="flex-1 flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3.5 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
               >
                 Buy Now
