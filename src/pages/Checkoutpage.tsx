@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useCartStore } from "@/store/cartStore";
 import { Navbar } from "@/components/Navbar";
 import { CheckCircle, ShoppingBag } from "lucide-react";
-import { checkoutSchema, type CheckoutForm } from "@/schemas/checkout.schema";
+import { checkoutSchema, type CheckoutForm } from "@/schema/checkout.schema";
 const CheckoutPage = () => {
   const navigate = useNavigate();
   const { items, getCartSummary, clearCart } = useCartStore();
@@ -78,7 +78,7 @@ const CheckoutPage = () => {
 
     if (!result.success) {
       const fieldErrors: Partial<Record<keyof CheckoutForm, string>> = {};
-      result.error.errors.forEach((err) => {
+      result.error.issues.forEach((err: any) => {
         const field = err.path[0] as keyof CheckoutForm;
         if (!fieldErrors[field]) {
           fieldErrors[field] = err.message;
@@ -105,8 +105,7 @@ const CheckoutPage = () => {
   };
 
   const inputClass = (field: keyof typeof form) =>
-    `w-full px-4 py-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition ${
-      errors[field] ? "border-rose-400 bg-rose-50" : "border-slate-200"
+    `w-full px-4 py-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition ${errors[field] ? "border-rose-400 bg-rose-50" : "border-slate-200"
     }`;
 
   return (
